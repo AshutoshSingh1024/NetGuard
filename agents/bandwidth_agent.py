@@ -1,9 +1,11 @@
 import time
 import urllib.request
 import urllib.error
-from common import CONFIG, CONTROLLER, post_report, pause
+from common import CONFIG, post_report, register_agent, pause, CONTROLLER
 
 AGENT_ID = "agent-3-bandwidth"
+AGENT_NAME = "Bandwidth Agent"
+CAPABILITIES = ["loopback_throughput_mbps"]
 
 
 def measure():
@@ -27,6 +29,7 @@ def measure():
 
 
 if __name__ == "__main__":
+    register_agent(AGENT_ID, AGENT_NAME, CAPABILITIES, float(CONFIG.get("interval_seconds", 5)))
     print(f"{AGENT_ID} started")
     while True:
         value, status, details = measure()

@@ -1,6 +1,10 @@
 {
   "interval_seconds": 5,
   "connect_timeout_seconds": 2,
+  "bind_host": "0.0.0.0",
+  "bind_port": 5000,
+  "controller_url": "http://127.0.0.1:5000",
+  "database_path": "network_monitor.db",
   "targets": [
     {"name": "Local web server", "host": "127.0.0.1", "port": 5000},
     {"name": "Cloudflare DNS", "host": "1.1.1.1", "port": 53},
@@ -11,5 +15,16 @@
   ],
   "bandwidth_server_host": "127.0.0.1",
   "bandwidth_server_port": 5000,
-  "bandwidth_bytes": 2000000
+  "bandwidth_bytes": 2000000,
+  "thresholds": {
+    "tcp_latency_ms": {"warning": 150, "critical": 500, "cooldown_seconds": 300},
+    "ping_rtt_ms": {"warning": 150, "critical": 500, "cooldown_seconds": 300},
+    "ping_loss_percent": {"warning": 20, "critical": 50, "cooldown_seconds": 300},
+    "tcp_probe_failure_percent": {"warning": 20, "critical": 50, "cooldown_seconds": 300},
+    "loopback_throughput_mbps": {"warning": 20, "critical": 5, "cooldown_seconds": 300, "invert": true}
+  },
+  "notifications": {
+    "webhook_url": null,
+    "smtp_host": null
+  }
 }

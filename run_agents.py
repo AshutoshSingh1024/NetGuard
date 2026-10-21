@@ -9,6 +9,8 @@ SCRIPTS = [
     AGENT_DIR / "latency_agent.py",
     AGENT_DIR / "loss_agent.py",
     AGENT_DIR / "bandwidth_agent.py",
+    AGENT_DIR / "ping_agent.py",
+    AGENT_DIR / "traffic_agent.py",
 ]
 
 processes = []
@@ -20,7 +22,7 @@ try:
         print(f"Started {script.name} (PID {p.pid})")
         time.sleep(0.3)
 
-    print("Three agents running. Press Ctrl+C to stop.")
+    print("Agents running. Press Ctrl+C to stop.")
     while True:
         for p in processes:
             if p.poll() is not None:

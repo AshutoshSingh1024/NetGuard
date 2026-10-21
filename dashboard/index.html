@@ -3,93 +3,487 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Network Monitor Prototype</title>
+  <title>Network Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
-    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-    body { margin: 0 auto; padding: 24px; max-width: 1100px; }
-    h1 { margin-bottom: 4px; }
-    .muted { opacity: .7; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 14px; margin: 22px 0; }
-    .card { border: 1px solid #8886; border-radius: 12px; padding: 16px; }
-    .metric { font-size: 1.8rem; font-weight: 700; overflow-wrap: anywhere; }
-    .status { font-weight: 700; }
-    .NORMAL, .UP, .OK { color: #30a46c; }
-    .HIGH, .LOW, .UNREACHABLE, .ERROR { color: #e09b35; }
-    .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; border-bottom: 1px solid #8885; padding: 9px; font-size: .92rem; }
-    code { overflow-wrap: anywhere; }
+    :root { color-scheme: light dark; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    body { margin: 0; padding: 0; max-width: none; background: #0b1120; color: #e2e8f0; }
+    .shell { padding: 24px; max-width: 1800px; margin: 0 auto; }
+    h1 { margin: 0 0 8px 0; font-size: 1.25rem; letter-spacing: -0.3px; }
+    .sub { margin: 0 0 24px 0; color: #94a3b8; font-size: .9rem; }
+
+    .accordion { display: flex; flex-direction: column; gap: 10px; }
+    .section { border: 1px solid #1f2937; border-radius: 10px; background: #111827; overflow: hidden; }
+    .section-head { padding: 12px 16px; background: #0f172a; border-bottom: 1px solid #1f2937; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; }
+    .section-head h2 { margin: 0; font-size: .95rem; text-transform: uppercase; letter-spacing: .4px; color: #e2e8f0; font-weight: 600; }
+    .section-head .arrow { font-size: .75rem; color: #94a3b8; transition: transform 0.2s; }
+    .section-head.open .arrow { transform: rotate(90deg); }
+    .section-body { padding: 0; max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
+    .section-body.open { max-height: 600px; overflow-y: auto; padding: 14px 16px; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 10px; margin-bottom: 12px; }
+    .card { border-radius: 8px; padding: 12px 14px; background: #0f172a; border: 1px solid #1f2937; }
+    .label { font-size: .75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .3px; margin-bottom: 6px; display: block; }
+    .metric { font-size: 1.6rem; font-weight: 700; overflow-wrap: anywhere; }
+    .status { font-weight: 700; font-size: .85rem; }
+    .NORMAL, .UP, .OK, .OPEN { color: #22c55e; }
+    .HIGH, .LOW, .WARNING { color: #f59e0b; }
+    .UNREACHABLE, .ERROR, .CLOSED, .CRITICAL { color: #ef4444; }
+    .OFFLINE { color: #64748b; }
+    .small { font-size: .78rem; color: #94a3b8; overflow-wrap: anywhere; }
+
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    th, td { text-align: left; border-bottom: 1px solid #1f2937; padding: 7px 9px; }
+    th { background: #0b1120; color: #94a3b8; text-transform: uppercase; font-size: .7rem; letter-spacing: .3px; position: sticky; top: 0; z-index: 1; }
+    tr.new-row { animation: rowSlide 0.3s; }
+    @keyframes rowSlide { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+    tr.pkt-row td { font-size: .78rem; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem; }
+    .empty { color: #94a3b8; font-style: italic; }
+
+    .check-bar { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 8px; margin-bottom: 12px; align-items: end; }
+    input[type=text] { background: #0f172a; border: 1px solid #374151; border-radius: 8px; color: #e2e8f0; padding: 9px 12px; font-size: .9rem; }
+    input[type=text]:focus { outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,0.2); }
+    button { border: none; border-radius: 8px; background: #38bdf8; color: #0f172a; font-weight: 700; padding: 9px 14px; font-size: .9rem; cursor: pointer; }
+    button:active { transform: translateY(1px); }
+    button.secondary { background: #374151; color: #fff; }
+    .check-result { margin-top: 8px; padding: 9px 12px; border-radius: 8px; background: #0f172a; border: 1px solid #1f2937; font-size: .9rem; display: none; }
+    .check-result.show { display: block; animation: slideIn 0.25s; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+    .alert-item { padding: 8px 10px; border-radius: 8px; background: #111827; border: 1px solid #1f2937; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: flex-start; }
+    .alert-item .alert-text { flex: 1; }
+    .alert-item button.ack { background: transparent; border: 1px solid #4b5563; color: #9ca3af; padding: 3px 9px; border-radius: 5px; font-size: .78rem; cursor: pointer; margin-left: 8px; }
+    .alert-item button.ack:active { background: #1f2937; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: .72rem; font-weight: 700; text-transform: uppercase; }
+    .badge-critical { background: #7f1d1d; color: #fecaca; }
+    .badge-high { background: #78350f; color: #fcd34d; }
+    .badge-warning { background: #451a03; color: #fbbf24; }
+    .badge-normal { background: #064e3b; color: #a7f3d0; }
+    .badge-offline { background: #374151; color: #9ca3af; }
+
+    .chart-wrap { height: 200px; }
+    .muted { opacity: .65; }
+    #stream-status { margin-bottom: 14px; font-size: .8rem; color: #94a3b8; }
   </style>
 </head>
 <body>
-  <h1>Network Monitor</h1>
-  <div class="muted">Three local agent processes → laptop controller → dashboard</div>
-  <div id="updated" class="muted">Waiting for agent reports…</div>
+  <div class="shell">
+    <h1>Network Monitor</h1>
+    <p class="sub">Distributed multi-agent monitoring &bull; live packet capture &bull; realtime SSE stream</p>
+    <div id="stream-status" class="muted">Connecting to live stream…</div>
 
-  <section class="grid" id="cards"></section>
+    <div class="accordion">
+      <!-- Critical Issues -->
+      <div class="section">
+        <div class="section-head" onclick="toggle(this)">Critical Issues <span class="arrow">▾</span></div>
+        <div class="section-body" id="body-critical">
+          <div id="criticalPanel"></div>
+        </div>
+      </div>
 
-  <h2>Latest reports</h2>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Time</th><th>Agent</th><th>Metric</th><th>Target</th><th>Value</th><th>Status</th></tr></thead>
-      <tbody id="reports"></tbody>
-    </table>
+      <!-- Agent Health -->
+      <div class="section">
+        <div class="section-head" onclick="toggle(this)">Agent Health <span class="arrow">▾</span></div>
+        <div class="section-body" id="body-agents">
+          <div id="agentCards"></div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="section">
+        <div class="section-head" onclick="toggle(this)">Trends <span class="arrow">▾</span></div>
+        <div class="section-body" id="body-trends">
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="card"><div class="label">Latency (ms)</div><div class="chart-wrap"><canvas id="chartLatency"></canvas></div></div>
+            <div class="card"><div class="label">Loss (%)</div><div class="chart-wrap"><canvas id="chartLoss"></canvas></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ad-hoc checks -->
+      <div class="section">
+        <div class="section-head" onclick="toggle(this)">Ad-hoc Checks <span class="arrow">▾</span></div>
+        <div class="section-body" id="body-checks">
+          <div class="check-bar">
+            <input type="text" id="checkHost" placeholder="IP / hostname" />
+            <input type="text" id="checkPort" placeholder="port" />
+            <input type="text" id="checkUrl" placeholder="URL" />
+            <div style="display:flex; gap:8px;">
+              <button class="check-btn" onclick="runCheck('ping')">Ping</button>
+              <button class="check-btn" onclick="runCheck('traceroute')">Traceroute</button>
+              <button class="check-btn" onclick="runCheck('dns')">DNS</button>
+              <button class="check-btn" onclick="runCheck('port')">Port</button>
+              <button class="check-btn" onclick="runCheck('http')">HTTP</button>
+            </div>
+          </div>
+          <div id="checkResult" class="check-result"></div>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <div class="section">
+        <div class="section-head" onclick="toggle(this)">Alerts <span class="arrow">▾</span></div>
+        <div class="section-body" id="body-alerts" style="max-height:300px;">
+          <div id="alerts"></div>
+        </div>
+      </div>
+
+      <!-- Reports -->
+      <div class="section">
+        <div class="section-head" onclick="toggle(this)">Reports <span class="arrow">▾</span></div>
+        <div class="section-body" id="body-reports" style="max-height:350px;">
+          <table>
+            <thead><tr><th>Time</th><th>Agent</th><th>Metric</th><th>Target</th><th>Value</th><th>Status</th></tr></thead>
+            <tbody id="reports"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Packet Capture -->
+      <div class="section">
+        <div class="section-head" onclick="toggle(this)">Packet Capture <span class="arrow">▾</span></div>
+        <div class="section-body" id="body-packets" style="max-height:300px;">
+          <div class="traffic-stat"><span class="val" id="pktTotal">0</span> packets &bull; <span id="pktProto" class="muted">—</span></div>
+          <table>
+            <thead><tr><th>Time</th><th>Src IP</th><th>Dst IP</th><th>Sport</th><th>Dport</th><th>Proto</th><th>Len</th><th>Info</th></tr></thead>
+            <tbody id="packets"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
-
-  <h2>Recent alerts</h2>
-  <div id="alerts" class="card muted">No alerts received yet.</div>
 
 <script>
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+const MAX_ROWS = 100;
+const MAX_PACKETS = 50;
+const order = [
+  ["agent-1-latency", "Latency Agent"],
+  ["agent-2-connection-loss", "Connection-Loss Agent"],
+  ["agent-3-bandwidth", "Bandwidth Agent"],
+  ["agent-4-ping", "Ping Agent"],
+  ["agent-5-traffic", "Traffic Capture Agent"],
+];
+const cards = {};
+
+function toggle(el) {
+  const open = el.classList.toggle("open");
+  const b = el.nextElementSibling;
+  if (b) { if (open) b.classList.add("open"); else b.classList.remove("open"); }
+}
+
+function unitFor(metric) {
+  const m = metric.toLowerCase();
+  if (m.includes("latency") || m.includes("ping_rtt")) return " ms";
+  if (m.includes("percent") || m.includes("ping_loss")) return "%";
+  if (m.includes("mbps")) return " Mbps";
+  if (m.includes("packets")) return " pkts";
+  return "";
+}
+
 function displayValue(r) {
   if (r.value === null || r.value === undefined) return "No measurement";
-  const unit = r.metric.includes("latency") ? " ms" :
-    r.metric.includes("percent") ? "%" :
-    r.metric.includes("mbps") ? " Mbps" : "";
-  return `${r.value}${unit}`;
+  return `${r.value}${unitFor(r.metric)}`;
 }
 
-async function refresh() {
+function statusClass(s) { return String(s ?? "").toUpperCase().replace(/\s/g, "_"); }
+function severityRank(status) {
+  const o = { CRITICAL:0, UNREACHABLE:1, ERROR:2, HIGH:3, WARNING:4, LOW:5, NORMAL:6, UP:7, OK:8, OPEN:9 };
+  return o[String(status).toUpperCase()] || 99;
+}
+
+function getOrCreateCard(id, label) {
+  let card = cards[id];
+  if (!card) {
+    card = document.createElement("div");
+    card.className = "card";
+    card.id = "card-" + id;
+    card.innerHTML = [
+      `<span class="label">${esc(label)}</span>`,
+      `<div class="metric" id="val-${id}">—</div>`,
+      `<div class="status" id="st-${id}">NO DATA</div>`,
+      `<div class="small" id="tg-${id}">—</div>`,
+      `<div class="small" id="ts-${id}">—</div>`,
+    ].join("");
+    document.getElementById("agentCards").appendChild(card);
+    cards[id] = card;
+  }
+  return card;
+}
+
+function updateCard(id, label, record) {
+  const card = getOrCreateCard(id, label);
+  const valEl = card.querySelector("#val-" + id);
+  const stEl = card.querySelector("#st-" + id);
+  const tgEl = card.querySelector("#tg-" + id);
+  const tsEl = card.querySelector("#ts-" + id);
+  if (record) {
+    valEl.textContent = displayValue(record);
+    stEl.textContent = record.status;
+    stEl.className = "status " + statusClass(record.status);
+    tgEl.textContent = record.target;
+    tsEl.textContent = record.timestamp ? new Date(record.timestamp).toLocaleTimeString() : "";
+  } else {
+    valEl.textContent = "—";
+    stEl.textContent = "NO DATA";
+    stEl.className = "status";
+    tgEl.textContent = "—";
+    tsEl.textContent = "—";
+  }
+  card.classList.remove("updated","live"); void card.offsetWidth; card.classList.add("updated");
+  setTimeout(() => card.classList.remove("updated"), 500);
+}
+
+function renderAgentCards(data) {
+  const latestByAgent = {};
+  (data.latest || []).forEach(r => {
+    if (!latestByAgent[r.agent_id] || new Date(r.timestamp) > new Date(latestByAgent[r.agent_id].timestamp)) {
+      latestByAgent[r.agent_id] = r;
+    }
+  });
+  order.forEach(([id, label]) => updateCard(id, label, latestByAgent[id] || null));
+}
+
+function renderCritical(data) {
+  const issues = (data.critical || []).slice(0, 10);
+  const panel = document.getElementById("criticalPanel");
+  if (!issues.length) {
+    panel.innerHTML = `<div class="card"><div class="label">Status</div><div class="metric">0</div><div class="status NORMAL">All healthy</div></div>`;
+    return;
+  }
+  panel.innerHTML = issues.map(i => `
+    <div style="padding:8px 10px;border-radius:8px;background:#0f172a;border:1px solid #1f2937;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div><span class="badge badge-${String(i.status).toLowerCase()}">${esc(i.status)}</span> ${esc(i.agent_id)} · ${esc(i.metric)} · ${esc(i.target)}</div>
+        <div class="small muted">${esc(displayValue(i))} · ${esc(i.details)}</div>
+      </div>
+      <div class="small muted">${new Date(i.timestamp).toLocaleTimeString()}</div>
+    </div>`).join("");
+}
+
+function addRow(record) {
+  const tbody = document.getElementById("reports");
+  const tr = document.createElement("tr");
+  tr.className = "new-row";
+  tr.innerHTML = [
+    `<td>${esc(new Date(record.timestamp).toLocaleTimeString())}</td>`,
+    `<td>${esc(record.agent_id)}</td>`,
+    `<td>${esc(record.metric)}</td>`,
+    `<td>${esc(record.target)}</td>`,
+    `<td>${esc(displayValue(record))}</td>`,
+    `<td class="status ${statusClass(record.status)}">${esc(record.status)}</td>`,
+  ].join("");
+  tbody.prepend(tr);
+  while (tbody.children.length > MAX_ROWS) tbody.lastElementChild.remove();
+  setTimeout(() => tr.classList.remove("new-row"), 300);
+}
+
+function addPacket(pkt) {
+  const tbody = document.getElementById("packets");
+  const tr = document.createElement("tr");
+  tr.className = "pkt-row";
+  tr.innerHTML = [
+    `<td class="mono">${esc(new Date(pkt.timestamp).toLocaleTimeString())}</td>`,
+    `<td class="mono">${esc(pkt.src_ip || "—")}</td>`,
+    `<td class="mono">${esc(pkt.dst_ip || "—")}</td>`,
+    `<td class="mono">${esc(pkt.src_port !== null && pkt.src_port !== undefined ? pkt.src_port : "—")}</td>`,
+    `<td class="mono">${esc(pkt.dst_port !== null && pkt.dst_port !== undefined ? pkt.dst_port : "—")}</td>`,
+    `<td class="mono status ${statusClass(pkt.protocol)}">${esc(pkt.protocol || "—")}</td>`,
+    `<td class="mono">${esc(pkt.length || "—")}</td>`,
+    `<td class="mono">${esc(pkt.info || "")}</td>`,
+  ].join("");
+  tbody.prepend(tr);
+  while (tbody.children.length > MAX_PACKETS) tbody.lastElementChild.remove();
+  setTimeout(() => tr.classList.remove("new-row"), 250);
+}
+
+function addAlert(a) {
+  const box = document.getElementById("alerts");
+  const el = document.createElement("div");
+  el.className = "alert-item";
+  el.id = "alert-" + a.id;
+  el.innerHTML = [
+    `<div class="alert-text"><span class="badge badge-${String(a.status).toLowerCase()}">${esc(a.status)}</span> ${esc(a.agent_id)} · ${esc(a.metric)} · ${esc(a.target)} · ${esc(displayValue(a))}<br><small class="muted">${esc(new Date(a.timestamp).toLocaleTimeString())} · ${esc(a.details)}</small></div>`,
+    `<button class="ack" onclick="ackAlert(${a.id})">Ack</button>`,
+  ].join("");
+  if (box.children.length === 0 || box.children[0].className === "empty") box.innerHTML = "";
+  box.prepend(el);
+}
+
+function ackAlert(id) {
+  fetch(`/api/alerts/${id}/ack`, { method: "POST" }).then(() => {
+    const el = document.getElementById("alert-" + id);
+    if (el) el.remove();
+    const box = document.getElementById("alerts");
+    if (box.children.length === 0) box.innerHTML = `<div class="empty">No alerts.</div>`;
+  });
+}
+
+function renderAlerts(alerts) {
+  const box = document.getElementById("alerts");
+  box.innerHTML = "";
+  if (!alerts.length) { box.innerHTML = `<div class="empty">No alerts.</div>`; return; }
+  alerts.slice(0, 30).forEach(addAlert);
+}
+
+function renderTrafficStats(stats) {
+  document.getElementById("pktTotal").textContent = stats.total_packets || 0;
+  document.getElementById("pktProto").textContent = (stats.by_protocol || []).map(p => `${esc(p.protocol || "?")}: ${p.c}`).join(" · ") || "—";
+}
+
+let charts = {};
+function initCharts() {
+  charts.latency = new Chart(document.getElementById("chartLatency").getContext("2d"), {
+    type: "line", data: { labels: [], datasets: [] },
+    options: { animation: false, responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { color: "#94a3b8" } }, x: { ticks: { color: "#94a3b8", maxRotation: 45 } } },
+      plugins: { legend: { labels: { color: "#94a3b8" } } }
+    }
+  });
+  charts.loss = new Chart(document.getElementById("chartLoss").getContext("2d"), {
+    type: "line", data: { labels: [], datasets: [] },
+    options: { animation: false, responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { color: "#94a3b8" } }, x: { ticks: { color: "#94a3b8", maxRotation: 45 } } },
+      plugins: { legend: { labels: { color: "#94a3b8" } } }
+    }
+  });
+}
+initCharts();
+
+function updateCharts(history) {
+  const recent = history.slice(-200);
+  const labels = [...new Set(recent.map(r => new Date(r.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })))];
+  const lat = {}, loss = {};
+  recent.forEach(r => {
+    const t = new Date(r.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (r.metric === "ping_rtt_ms" || r.metric === "tcp_latency_ms") {
+      if (!lat[r.metric]) lat[r.metric] = [];
+      lat[r.metric].push({ x: t, y: r.value });
+    }
+    if (r.metric === "ping_loss_percent" || r.metric === "tcp_probe_failure_percent") {
+      if (!loss[r.metric]) loss[r.metric] = [];
+      loss[r.metric].push({ x: t, y: r.value });
+    }
+  });
+  charts.latency.data.labels = labels;
+  charts.latency.data.datasets = Object.entries(lat).map(([metric, d], i) => ({ label: metric, data: d, borderColor: i === 0 ? "#38bdf8" : "#22c55e", backgroundColor: "rgba(0,0,0,0)", tension: 0.3, pointRadius: 0 }));
+  charts.latency.update();
+  charts.loss.data.labels = labels;
+  charts.loss.data.datasets = Object.entries(loss).map(([metric, d], i) => ({ label: metric, data: d, borderColor: i === 0 ? "#f59e0b" : "#ef4444", backgroundColor: "rgba(0,0,0,0)", tension: 0.3, pointRadius: 0 }));
+  charts.loss.update();
+}
+
+async function initialLoad() {
   try {
-    const response = await fetch("/api/metrics", {cache: "no-store"});
-    const data = await response.json();
-    const latest = Object.values(data.latest || {});
-    document.getElementById("updated").textContent =
-      `Last dashboard update: ${new Date().toLocaleTimeString()} · ${latest.length} agents reporting`;
-
-    document.getElementById("cards").innerHTML = [
-      ["agent-1-latency", "Latency agent"],
-      ["agent-2-connection-loss", "Connection-failure agent"],
-      ["agent-3-bandwidth", "Bandwidth agent"]
-    ].map(([id, label]) => {
-      const r = (data.latest || {})[id];
-      return `<div class="card"><div class="muted">${label}</div>
-        <div class="metric">${r ? esc(displayValue(r)) : "Waiting…"}</div>
-        <div class="status ${r ? esc(r.status) : ""}">${r ? esc(r.status) : "NO DATA"}</div>
-        <div class="muted">${r ? esc(r.target) : "Start run_agents.py"}</div>
-        <small class="muted">${r ? esc(r.timestamp) : ""}</small></div>`;
-    }).join("");
-
-    const rows = [...(data.history || [])].reverse().slice(0, 50);
-    document.getElementById("reports").innerHTML = rows.map(r =>
-      `<tr><td>${esc(new Date(r.timestamp).toLocaleTimeString())}</td>
-      <td>${esc(r.agent_id)}</td><td>${esc(r.metric)}</td><td>${esc(r.target)}</td>
-      <td>${esc(displayValue(r))}</td><td class="status ${esc(r.status)}">${esc(r.status)}</td></tr>`
-    ).join("");
-
-    const alerts = (data.alerts || []).slice(-12).reverse();
-    document.getElementById("alerts").innerHTML = alerts.length
-      ? alerts.map(a => `<p><b>${esc(a.agent_id)}</b>: ${esc(a.message)}
-          <br><small class="muted">${esc(a.timestamp)} · ${esc(a.details)}</small></p>`).join("")
-      : "No alerts received yet.";
+    const [mRes, cRes, tRes] = await Promise.all([
+      fetch("/api/metrics", { cache: "no-store" }),
+      fetch("/api/critical", { cache: "no-store" }),
+      fetch("/api/traffic", { cache: "no-store" }),
+    ]);
+    const m = await mRes.json();
+    const c = await cRes.json();
+    const t = await tRes.json();
+    renderAgentCards(m);
+    renderCritical(c);
+    renderAlerts(m.alerts || []);
+    renderTrafficStats(t);
+    updateCharts(m.history || []);
+    document.getElementById("stream-status").textContent = "Live stream connected";
+    document.getElementById("stream-status").style.color = "#22c55e";
   } catch (e) {
-    document.getElementById("updated").textContent = "Cannot reach controller. Is controller.py running?";
+    document.getElementById("stream-status").textContent = "Cannot reach controller";
+    document.getElementById("stream-status").style.color = "#ef4444";
   }
 }
-refresh();
-setInterval(refresh, 2000);
+
+function handleRecord(record) {
+  if (record.type === "alert_acked") {
+    const el = document.getElementById("alert-" + record.alert_id);
+    if (el) el.remove();
+    return;
+  }
+  const id = record.agent_id;
+  if (id === "manual-ping" || id === "manual-check") {
+    showCheckResult(record);
+  } else {
+    const label = order.find(([i]) => i === id);
+    updateCard(id, label ? label[1] : id, record);
+  }
+  addRow(record);
+  if (record.status !== "NORMAL" && record.status !== "UP" && record.status !== "OK" && record.status !== "OPEN") {
+    addAlert({ id: Date.now(), status: record.status, agent_id: record.agent_id, metric: record.metric, target: record.target, value: record.value, details: record.details, timestamp: record.timestamp });
+  }
+}
+
+function showCheckResult(record) {
+  const status = record.status;
+  let color = "#22c55e";
+  if (status === "HIGH" || status === "WARNING") color = "#f59e0b";
+  if (status === "UNREACHABLE" || status === "ERROR" || status === "CLOSED" || status === "CRITICAL") color = "#ef4444";
+  const val = record.value === null ? "—" : record.value + unitFor(record.metric);
+  const res = document.getElementById("checkResult");
+  res.innerHTML = `<span style="color:${color};font-weight:700">${esc(status)}</span> · ${esc(record.target)} · ${val} · ${esc(record.details)}`;
+  res.className = "check-result show";
+  setTimeout(() => res.className = "check-result", 5000);
+}
+
+async function runCheck(type) {
+  const host = document.getElementById("checkHost").value.trim();
+  const port = document.getElementById("checkPort").value.trim();
+  const url = document.getElementById("checkUrl").value.trim();
+  let body = { type };
+  if (type === "ping" || type === "traceroute" || type === "dns") body.host = host;
+  if (type === "port") { body.host = host; body.port = port || 80; }
+  if (type === "http") body.url = url;
+  try {
+    const res = await fetch("/api/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const json = await res.json();
+    showCheckResult({ agent_id: "manual-check", target: body.host || body.url || "manual", value: json.result.rtt_ms ?? json.result.status_code, status: json.result.status, details: json.result.details || json.result.output || "" });
+    addRow({ agent_id: "manual-check", metric: "adhoc_" + type, target: body.host || body.url || "manual", value: json.result.rtt_ms ?? json.result.status_code, status: json.result.status, details: json.result.details || json.result.output || "", timestamp: new Date().toISOString() });
+  } catch (e) {
+    const res = document.getElementById("checkResult");
+    res.textContent = "Error: " + esc(String(e));
+    res.style.color = "#ef4444";
+    res.className = "check-result show";
+    setTimeout(() => res.className = "check-result", 5000);
+  }
+}
+
+document.getElementById("checkHost").addEventListener("keydown", (e) => { if (e.key === "Enter") runCheck("ping"); });
+
+initialLoad();
+
+if (typeof EventSource !== "undefined") {
+  const es = new EventSource("/api/stream");
+  es.onmessage = (ev) => {
+    try { const record = JSON.parse(ev.data); handleRecord(record); } catch (e) { /* heartbeat */ }
+  };
+  es.onerror = () => {
+    document.getElementById("stream-status").textContent = "Stream reconnecting…";
+    document.getElementById("stream-status").style.color = "#f59e0b";
+    es.close();
+    setTimeout(() => location.reload(), 3000);
+  };
+}
+
+setInterval(async () => {
+  try {
+    const [cRes, tRes, pRes] = await Promise.all([
+      fetch("/api/critical", { cache: "no-store" }),
+      fetch("/api/traffic", { cache: "no-store" }),
+      fetch("/api/packets?limit=50", { cache: "no-store" }),
+    ]);
+    const c = await cRes.json();
+    const t = await tRes.json();
+    const p = await pRes.json();
+    renderCritical(c);
+    renderTrafficStats(t);
+    (p.packets || []).reverse().forEach(addPacket);
+  } catch (e) { /* ignore */ }
+}, 4000);
 </script>
 </body>
 </html>
