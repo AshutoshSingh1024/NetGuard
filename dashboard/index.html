@@ -458,14 +458,16 @@ initialLoad();
 
 if (typeof EventSource !== "undefined") {
   const es = new EventSource("/api/stream");
+  es.onopen = () => {
+    document.getElementById("stream-status").textContent = "Live stream connected";
+    document.getElementById("stream-status").style.color = "#22c55e";
+  };
   es.onmessage = (ev) => {
     try { const record = JSON.parse(ev.data); handleRecord(record); } catch (e) { /* heartbeat */ }
   };
   es.onerror = () => {
     document.getElementById("stream-status").textContent = "Stream reconnecting…";
     document.getElementById("stream-status").style.color = "#f59e0b";
-    es.close();
-    setTimeout(() => location.reload(), 3000);
   };
 }
 
