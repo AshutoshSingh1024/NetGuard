@@ -1,0 +1,15 @@
+{
+  "interval_seconds": 5,
+  "connect_timeout_seconds": 2,
+  "targets": [
+    {"name": "Local web server", "host": "127.0.0.1", "port": 5000},
+    {"name": "Cloudflare DNS", "host": "1.1.1.1", "port": 53},
+    {"name": "Google DNS", "host": "8.8.8.8", "port": 53}
+  ],
+  "service_urls": [
+    {"name": "Local dashboard", "url": "http://127.0.0.1:5000/health"}
+  ],
+  "bandwidth_server_host": "127.0.0.1",
+  "bandwidth_server_port": 5000,
+  "bandwidth_bytes": 2000000
+}

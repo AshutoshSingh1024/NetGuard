@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network Monitor Prototype</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0 auto; padding: 24px; max-width: 1100px; }
+    h1 { margin-bottom: 4px; }
+    .muted { opacity: .7; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 14px; margin: 22px 0; }
+    .card { border: 1px solid #8886; border-radius: 12px; padding: 16px; }
+    .metric { font-size: 1.8rem; font-weight: 700; overflow-wrap: anywhere; }
+    .status { font-weight: 700; }
+    .NORMAL, .UP, .OK { color: #30a46c; }
+    .HIGH, .LOW, .UNREACHABLE, .ERROR { color: #e09b35; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; border-bottom: 1px solid #8885; padding: 9px; font-size: .92rem; }
+    code { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <h1>Network Monitor</h1>
+  <div class="muted">Three local agent processes → laptop controller → dashboard</div>
+  <div id="updated" class="muted">Waiting for agent reports…</div>
+
+  <section class="grid" id="cards"></section>
+
+  <h2>Latest reports</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>Agent</th><th>Metric</th><th>Target</th><th>Value</th><th>Status</th></tr></thead>
+      <tbody id="reports"></tbody>
+    </table>
+  </div>
+
+  <h2>Recent alerts</h2>
+  <div id="alerts" class="card muted">No alerts received yet.</div>
+
+<script>
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function displayValue(r) {
+  if (r.value === null || r.value === undefined) return "No measurement";
+  const unit = r.metric.includes("latency") ? " ms" :
+    r.metric.includes("percent") ? "%" :
+    r.metric.includes("mbps") ? " Mbps" : "";
+  return `${r.value}${unit}`;
+}
+
+async function refresh() {
+  try {
+    const response = await fetch("/api/metrics", {cache: "no-store"});
+    const data = await response.json();
+    const latest = Object.values(data.latest || {});
+    document.getElementById("updated").textContent =
+      `Last dashboard update: ${new Date().toLocaleTimeString()} · ${latest.length} agents reporting`;
+
+    document.getElementById("cards").innerHTML = [
+      ["agent-1-latency", "Latency agent"],
+      ["agent-2-connection-loss", "Connection-failure agent"],
+      ["agent-3-bandwidth", "Bandwidth agent"]
+    ].map(([id, label]) => {
+      const r = (data.latest || {})[id];
+      return `<div class="card"><div class="muted">${label}</div>
+        <div class="metric">${r ? esc(displayValue(r)) : "Waiting…"}</div>
+        <div class="status ${r ? esc(r.status) : ""}">${r ? esc(r.status) : "NO DATA"}</div>
+        <div class="muted">${r ? esc(r.target) : "Start run_agents.py"}</div>
+        <small class="muted">${r ? esc(r.timestamp) : ""}</small></div>`;
+    }).join("");
+
+    const rows = [...(data.history || [])].reverse().slice(0, 50);
+    document.getElementById("reports").innerHTML = rows.map(r =>
+      `<tr><td>${esc(new Date(r.timestamp).toLocaleTimeString())}</td>
+      <td>${esc(r.agent_id)}</td><td>${esc(r.metric)}</td><td>${esc(r.target)}</td>
+      <td>${esc(displayValue(r))}</td><td class="status ${esc(r.status)}">${esc(r.status)}</td></tr>`
+    ).join("");
+
+    const alerts = (data.alerts || []).slice(-12).reverse();
+    document.getElementById("alerts").innerHTML = alerts.length
+      ? alerts.map(a => `<p><b>${esc(a.agent_id)}</b>: ${esc(a.message)}
+          <br><small class="muted">${esc(a.timestamp)} · ${esc(a.details)}</small></p>`).join("")
+      : "No alerts received yet.";
+  } catch (e) {
+    document.getElementById("updated").textContent = "Cannot reach controller. Is controller.py running?";
+  }
+}
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
