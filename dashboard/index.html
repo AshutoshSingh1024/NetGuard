@@ -232,7 +232,7 @@ function updateCard(id, label, record) {
 
 function renderAgentCards(data) {
   const latestByAgent = {};
-  (data.latest || []).forEach(r => {
+  Object.values(data.latest || {}).forEach(r => {
     if (!latestByAgent[r.agent_id] || new Date(r.timestamp) > new Date(latestByAgent[r.agent_id].timestamp)) {
       latestByAgent[r.agent_id] = r;
     }

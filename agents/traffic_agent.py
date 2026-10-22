@@ -70,7 +70,15 @@ def _capture(interval_seconds):
 
             info = ""
             if pkt.haslayer(Raw):
-                info = pkt[Raw].load[:40].decode("utf-8", "replace").replace("\n", " ")
+                raw = pkt[Raw].load[:40]
+                try:
+                    text = raw.decode("utf-8")
+                    if all(32 <= b < 127 or b in (9, 10, 13) for b in text.encode("utf-8")):
+                        info = text.replace("\n", " ").replace("\r", "")
+                    else:
+                        info = "encrypted"
+                except UnicodeDecodeError:
+                    info = "encrypted"
 
             if len(stats["samples"]) < 200:
                 stats["samples"].append({
