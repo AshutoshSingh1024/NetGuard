@@ -173,6 +173,7 @@ function toggle(el) {
 }
 
 function unitFor(metric) {
+  if (!metric) return "";
   const m = metric.toLowerCase();
   if (m.includes("latency") || m.includes("ping_rtt")) return " ms";
   if (m.includes("percent") || m.includes("ping_loss")) return "%";
@@ -186,7 +187,7 @@ function displayValue(r) {
   return `${r.value}${unitFor(r.metric)}`;
 }
 
-function statusClass(s) { return String(s ?? "").toUpperCase().replace(/\s/g, "_"); }
+function statusClass(s) { return String(s ?? "unknown").toUpperCase().replace(/\s/g, "_"); }
 
 function getOrCreateCard(id, label) {
   let card = cards[id];
@@ -471,7 +472,7 @@ async function runCheck(type) {
   try {
     const res = await fetch("/api/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const json = await res.json();
-    showCheckResult({ agent_id: "manual-check", target: body.host || body.url || "manual", value: json.result.rtt_ms ?? json.result.status_code, status: json.result.status, details: json.result.details || json.result.output || "" });
+    showCheckResult({ agent_id: "manual-check", metric: "adhoc_" + type, target: body.host || body.url || "manual", value: json.result.rtt_ms ?? json.result.status_code, status: json.result.status, details: json.result.details || json.result.output || "" });
     addRow({ agent_id: "manual-check", metric: "adhoc_" + type, target: body.host || body.url || "manual", value: json.result.rtt_ms ?? json.result.status_code, status: json.result.status, details: json.result.details || json.result.output || "", timestamp: new Date().toISOString() });
   } catch (e) {
     const res = document.getElementById("checkResult");
